@@ -3,14 +3,36 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain_core.messages import AIMessage
 from langchain.tools import tool
 
-from core.config import Settings
+from core.config import Settings, normalized_provider
 from retrieval.index import LocalEmbeddingIndex
 from retrieval.llm import build_llm
+from retrieval.qa import answer_question
+
+
+class MockPaperAgent:
+    """Small agent-compatible adapter for offline demos and automated tests."""
+
+    def __init__(self, settings: Settings, index: LocalEmbeddingIndex):
+        self.settings = settings
+        self.index = index
+
+    def invoke(self, payload: dict[str, Any]) -> dict[str, list[AIMessage]]:
+        messages = payload.get("messages", [])
+        if not messages:
+            return {"messages": [AIMessage(content="No question was provided.")]}
+        final = messages[-1]
+        question = final.get("content", "") if isinstance(final, dict) else getattr(final, "content", "")
+        result = answer_question(str(question), self.settings, self.index)
+        return {"messages": [AIMessage(content=result.answer)]}
 
 
 def build_agent(settings: Settings, index: LocalEmbeddingIndex):
+    if normalized_provider(settings) == "mock":
+        return MockPaperAgent(settings, index)
+
     @tool
     def semantic_search_papers(query: str, top_k: int = 4) -> str:
         """Search the local paper corpus with embeddings and return the most relevant papers."""
@@ -56,4 +78,15 @@ def run_agent_question(agent: Any, question: str) -> str:
     if not messages:
         return ""
     final_message = messages[-1]
-    return getattr(final_message, "content", str(final_message))
+    content = getattr(final_message, "content", str(final_message))
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("text"):
+                parts.append(str(block["text"]))
+        return "\n".join(parts)
+    return str(content)

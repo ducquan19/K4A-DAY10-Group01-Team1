@@ -1,19 +1,69 @@
 from __future__ import annotations
 
+from core.config import load_settings
+from core.utils import now_utc
+from evaluation.metrics import evaluate_pipeline
+from evaluation.testset import build_test_set
+from ingestion.cleaning import build_clean_dataframe
+from ingestion.crossref import fetch_source_records, load_raw_records
+from observability.quality import build_freshness_report, run_data_quality_checks
+from observability.reporting import generate_phase1_report
+from pipelines.artifacts import save_dataframe
+from retrieval.index import LocalEmbeddingIndex
+
 
 def main() -> None:
-    """TODO(student): xay dung baseline pipeline end-to-end.
+    """Run the clean baseline flow and persist every required artifact."""
+    settings = load_settings()
+    paths = settings.paths
 
-    Pseudo-code:
-    1. Load settings.
-    2. Load hoac fetch raw records.
-    3. Clean data.
-    4. Save clean CSV/JSON.
-    5. Build Chroma index.
-    6. Tao hoac load evaluation set.
-    7. Evaluate.
-    8. Run quality checks va freshness report.
-    9. Tao markdown report.
-    10. Co the demo agent tren vai sample question.
-    """
-    raise NotImplementedError("Student task: implement phase1 pipeline.")
+    if settings.refresh_source or not paths.raw_records_json.exists():
+        records = fetch_source_records(settings)
+        source_mode = "crossref-api-or-fallback"
+    else:
+        records = load_raw_records(paths.raw_records_json)
+        source_mode = "raw-records-snapshot"
+    if not records:
+        raise RuntimeError("The source produced no paper records; baseline pipeline stopped.")
+
+    clean_df = build_clean_dataframe(records, now_utc())
+    save_dataframe(clean_df, paths.clean_csv, paths.clean_json)
+
+    quality = run_data_quality_checks(clean_df, settings, "baseline")
+    freshness = build_freshness_report(clean_df, settings, paths.freshness_report)
+    if not quality.get("success", False):
+        raise RuntimeError("Baseline data failed the quality gate; refusing to build the serving index.")
+
+    index = LocalEmbeddingIndex.build(clean_df, settings, paths.embeddings_json)
+    if settings.refresh_test_set or not paths.eval_testset.exists():
+        build_test_set(clean_df, paths.eval_testset)
+
+    evaluation = evaluate_pipeline(
+        settings,
+        index,
+        paths.eval_testset,
+        paths.baseline_metrics,
+        paths.baseline_answers,
+    )
+    source_summary = {
+        "source": settings.source_api,
+        "mode": source_mode,
+        "query": settings.source_query,
+        "records_loaded": len(records),
+        "clean_rows": len(clean_df),
+        "collection": settings.baseline_collection_name,
+    }
+    generate_phase1_report(
+        paths.baseline_report,
+        source_summary,
+        evaluation.summary,
+        quality,
+        freshness,
+    )
+
+    print(
+        "Baseline complete: "
+        f"rows={len(clean_df)}, collection={index.collection_name}, "
+        f"hit_rate={evaluation.summary['retrieval_hit_rate']:.3f}, "
+        f"token_f1={evaluation.summary['mean_token_f1']:.3f}"
+    )

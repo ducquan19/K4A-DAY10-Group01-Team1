@@ -22,6 +22,18 @@ class SearchResult:
 
 
 class LocalEmbeddingIndex:
+    REQUIRED_COLUMNS = {
+        "paper_id",
+        "title",
+        "text_for_embedding",
+        "published",
+        "authors_joined",
+        "categories_joined",
+        "summary",
+        "abs_url",
+        "pdf_url",
+    }
+
     def __init__(
         self,
         settings: Settings,
@@ -37,29 +49,57 @@ class LocalEmbeddingIndex:
         self.embedding_model = MiniLMEmbeddings(settings.embedding_model)
         self.client = chromadb.PersistentClient(path=str(persist_path))
         self.collection = self.client.get_collection(name=collection_name)
-        self.documents_by_paper_id = {document["paper_id"].lower(): document for document in documents}
-        self.documents_by_title = {document["title"].lower(): document for document in documents}
+        self.documents_by_paper_id = {document["paper_id"].casefold(): document for document in documents}
+        self.documents_by_title = {document["title"].casefold(): document for document in documents}
+
+    @classmethod
+    def _validate_dataframe(cls, df: pd.DataFrame) -> None:
+        missing = sorted(cls.REQUIRED_COLUMNS.difference(df.columns))
+        if missing:
+            raise ValueError(f"Cannot build retrieval index; missing columns: {', '.join(missing)}")
+        if df.empty:
+            raise ValueError("Cannot build retrieval index from an empty dataframe.")
+
+        invalid_ids = df["paper_id"].isna() | df["paper_id"].astype(str).str.strip().eq("")
+        if invalid_ids.any():
+            raise ValueError("Cannot build retrieval index with blank paper_id values.")
+
+        invalid_text = df["text_for_embedding"].isna() | df["text_for_embedding"].astype(str).str.strip().eq("")
+        if invalid_text.any():
+            raise ValueError("Cannot build retrieval index with blank text_for_embedding values.")
+
+    @staticmethod
+    def _metadata_text(value: Any) -> str:
+        if value is None:
+            return ""
+        try:
+            if pd.isna(value):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        return str(value)
 
     @staticmethod
     def _build_documents(df: pd.DataFrame) -> list[dict[str, Any]]:
+        LocalEmbeddingIndex._validate_dataframe(df)
         records = df.to_dict(orient="records")
         documents: list[dict[str, Any]] = []
         for index, row in enumerate(records):
             documents.append(
                 {
                     "record_id": f"{row['paper_id']}::{index}",
-                    "paper_id": row["paper_id"],
-                    "title": row["title"],
-                    "content": row["text_for_embedding"],
+                    "paper_id": str(row["paper_id"]),
+                    "title": str(row["title"]),
+                    "content": str(row["text_for_embedding"]),
                     "metadata": {
-                        "paper_id": row["paper_id"],
-                        "title": row["title"],
-                        "published": row["published"],
-                        "authors_joined": row["authors_joined"],
-                        "categories_joined": row["categories_joined"],
-                        "summary": row["summary"],
-                        "abs_url": row["abs_url"],
-                        "pdf_url": row["pdf_url"],
+                        "paper_id": LocalEmbeddingIndex._metadata_text(row["paper_id"]),
+                        "title": LocalEmbeddingIndex._metadata_text(row["title"]),
+                        "published": LocalEmbeddingIndex._metadata_text(row["published"]),
+                        "authors_joined": LocalEmbeddingIndex._metadata_text(row["authors_joined"]),
+                        "categories_joined": LocalEmbeddingIndex._metadata_text(row["categories_joined"]),
+                        "summary": LocalEmbeddingIndex._metadata_text(row["summary"]),
+                        "abs_url": LocalEmbeddingIndex._metadata_text(row["abs_url"]),
+                        "pdf_url": LocalEmbeddingIndex._metadata_text(row["pdf_url"]),
                     },
                 }
             )
@@ -80,6 +120,20 @@ class LocalEmbeddingIndex:
             return name_map[resolved_path]
         return safe_slug(embeddings_output_path.stem)
 
+    @staticmethod
+    def _manifest_persist_path(settings: Settings, persist_path: Path) -> str:
+        try:
+            return persist_path.resolve().relative_to(settings.paths.project_dir).as_posix()
+        except ValueError:
+            return str(persist_path.resolve())
+
+    @staticmethod
+    def _resolve_persist_path(settings: Settings, manifest_value: str) -> Path:
+        persist_path = Path(manifest_value)
+        if not persist_path.is_absolute():
+            persist_path = settings.paths.project_dir / persist_path
+        return persist_path.resolve()
+
     @classmethod
     def build(
         cls,
@@ -95,13 +149,15 @@ class LocalEmbeddingIndex:
         embedding_model = MiniLMEmbeddings(settings.embedding_model)
         client = chromadb.PersistentClient(path=str(persist_path))
         try:
-            client.delete_collection(name=collection_name)
+            collection = client.get_collection(name=collection_name)
+            existing_ids = collection.get(include=[]).get("ids", [])
+            if existing_ids:
+                collection.delete(ids=existing_ids)
         except Exception:
-            pass
-        collection = client.create_collection(
-            name=collection_name,
-            configuration={"hnsw": {"space": "cosine"}},
-        )
+            collection = client.create_collection(
+                name=collection_name,
+                configuration={"hnsw": {"space": "cosine"}},
+            )
         embeddings = embedding_model.embed_documents([document["content"] for document in documents])
         collection.add(
             ids=[document["record_id"] for document in documents],
@@ -116,7 +172,7 @@ class LocalEmbeddingIndex:
             {
                 "backend": "chroma",
                 "embedding_model": settings.embedding_model,
-                "persist_path": str(persist_path),
+                "persist_path": cls._manifest_persist_path(settings, persist_path),
                 "collection_name": collection_name,
                 "documents": documents,
             },
@@ -135,14 +191,22 @@ class LocalEmbeddingIndex:
             settings=settings,
             collection_name=payload["collection_name"],
             documents=payload["documents"],
-            persist_path=Path(payload["persist_path"]),
+            persist_path=cls._resolve_persist_path(settings, payload["persist_path"]),
         )
 
     def search(self, query: str, top_k: int | None = None) -> list[SearchResult]:
+        if not query.strip():
+            return []
+        requested = top_k or self.settings.top_k
+        if requested < 1:
+            raise ValueError("top_k must be at least 1.")
+        result_count = min(requested, self.collection.count())
+        if result_count == 0:
+            return []
         query_embedding = self.embedding_model.embed_query(query)
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k or self.settings.top_k,
+            n_results=result_count,
             include=["documents", "metadatas", "distances"],
         )
         ids = results.get("ids", [[]])[0]
@@ -166,7 +230,7 @@ class LocalEmbeddingIndex:
         return scored
 
     def lookup(self, value: str) -> dict[str, Any] | None:
-        needle = value.strip().lower()
+        needle = value.strip().casefold()
         if needle in self.documents_by_paper_id:
             return self.documents_by_paper_id[needle]
         if needle in self.documents_by_title:
