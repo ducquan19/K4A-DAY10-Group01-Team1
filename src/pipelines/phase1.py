@@ -16,6 +16,7 @@ def main() -> None:
     """Run the clean baseline flow and persist every required artifact."""
     settings = load_settings()
     paths = settings.paths
+    run_time = now_utc()
 
     if settings.refresh_source or not paths.raw_records_json.exists():
         records = fetch_source_records(settings)
@@ -26,7 +27,7 @@ def main() -> None:
     if not records:
         raise RuntimeError("The source produced no paper records; baseline pipeline stopped.")
 
-    clean_df = build_clean_dataframe(records, now_utc())
+    clean_df = build_clean_dataframe(records, run_time)
     save_dataframe(clean_df, paths.clean_csv, paths.clean_json)
 
     quality = run_data_quality_checks(clean_df, settings, "baseline")
@@ -47,10 +48,19 @@ def main() -> None:
     )
     source_summary = {
         "source": settings.source_api,
+        "source_name": settings.source_api,
         "mode": source_mode,
         "query": settings.source_query,
+        "run_date": run_time.date().isoformat(),
+        "raw_count": len(records),
         "records_loaded": len(records),
         "clean_rows": len(clean_df),
+        "duplicates_removed": max(0, len(records) - len(clean_df)),
+        "avg_summary_chars": (
+            round(float(clean_df["summary_chars"].mean()), 2)
+            if "summary_chars" in clean_df.columns and not clean_df.empty
+            else "N/A"
+        ),
         "collection": settings.baseline_collection_name,
     }
     generate_phase1_report(

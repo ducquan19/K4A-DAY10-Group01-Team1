@@ -11,14 +11,14 @@
 
 | STT | Họ và tên | MSSV | Vai trò & Phân công công việc | Báo cáo cá nhân |
 |---:|---|---|---|---|
-| 1 | | | Pipeline Lead, Integrator & RAG Specialist<br>*(`core/`, `phase1.py`, `corruption_flow.py`, `retrieval/index.py`, `embeddings.py`, ChromaDB)* | `report/<MSSV1>_HoTen.md` |
+| 1 | Bùi Đình Đề | 2A202602818 | Pipeline Lead, Integrator & RAG Specialist<br>*(`core/`, `phase1.py`, `corruption_flow.py`, `retrieval/`, ChromaDB, corruption integration)* | [`report/2A202602818_Bui_Dinh_De.md`](../report/2A202602818_Bui_Dinh_De.md) |
 | 2 | Trần Đức Quân | 2A202602922 | Data Foundation, Observability & Evaluation Lead<br>*(`crossref.py`, `cleaning.py`, `quality.py` GX 1.x, `testset.py`, `reporting.py`)* | [`report/2A202602922_Tran_Duc_Quan.md`](../report/2A202602922_Tran_Duc_Quan.md) |
 
 ---
 
 ## Cá nhân
 
-### ThanhVien1-MSSV1
+### Bùi Đình Đề - 2A202602818
 - **Vai trò:** Pipeline Lead, Integrator & RAG Specialist.
 - **Phạm vi trách nhiệm:**
   - Quản trị cấu hình `core/config.py`, đường dẫn artifacts `core/utils.py`, điều phối luồng `src/pipelines/phase1.py` và `src/pipelines/corruption_flow.py`.
@@ -26,6 +26,8 @@
 - **Công việc chi tiết đã hoàn thành:**
   - Thiết lập cấu hình hệ thống và liên kết các pipeline end-to-end.
   - Quản lý cơ chế chuyển đổi LLM provider và kiểm thử truy vấn vector database.
+  - Hoàn thiện bộ 6 corruption scenarios, kiểm chứng Quality Gate, Freshness SLA và Idempotent Repair bằng artifacts thực tế.
+  - Bổ sung auto-repair trigger/log, test suite 22 ca, coverage gate 80% và GitHub Actions Python 3.11/3.13.
   - Theo dõi tính nhất quán dữ liệu và đảm bảo commit contributor trên GitHub nhánh `main`.
 - **Điều học được / Đóng góp chính:**
   - Thiết kế kiến trúc Idempotent Pipeline và cô lập không gian vector phục vụ đối chiếu công bằng giữa dữ liệu sạch và dữ liệu lỗi.

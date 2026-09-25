@@ -137,6 +137,18 @@ def evaluate_pipeline(
         "judge_accuracy": mean(1.0 if item["judge"]["correct"] else 0.0 for item in answers),
         "mean_judge_score": mean(item["judge"]["score"] for item in answers),
     }
+    fallback_judge_samples = sum(
+        "Fallback heuristic" in item["judge"].get("reasoning", "") for item in answers
+    )
+    summary["llm_judge_samples"] = len(answers) - fallback_judge_samples
+    summary["fallback_judge_samples"] = fallback_judge_samples
+    summary["judge_backend"] = (
+        "llm"
+        if fallback_judge_samples == 0
+        else "fallback"
+        if fallback_judge_samples == len(answers)
+        else "mixed"
+    )
     summary["ragas"] = _run_ragas(settings, answers)
 
     bundle = EvaluationBundle(summary=summary, answers=answers)

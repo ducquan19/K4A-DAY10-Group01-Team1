@@ -91,6 +91,7 @@ class PipelineOrchestrationTests(unittest.TestCase):
             patch.object(corruption_flow, "load_raw_records", return_value=["raw-record"]) as load_raw,
             patch.object(corruption_flow, "build_clean_dataframe", return_value=repaired) as rebuild,
             patch.object(corruption_flow, "generate_corruption_report"),
+            patch.object(corruption_flow, "write_json") as write_json,
             redirect_stdout(StringIO()),
         ):
             corruption_flow.main()
@@ -104,6 +105,11 @@ class PipelineOrchestrationTests(unittest.TestCase):
                 call(corrupted, settings.paths.corrupted_clean_csv, settings.paths.corrupted_clean_json),
                 call(repaired, settings.paths.repaired_clean_csv, settings.paths.repaired_clean_json),
             ],
+        )
+        self.assertTrue(write_json.call_args.args[1]["triggered_automatically"])
+        self.assertEqual(
+            write_json.call_args.args[1]["trigger_reasons"],
+            ["data_quality_gate_failed", "freshness_sla_failed"],
         )
 
 

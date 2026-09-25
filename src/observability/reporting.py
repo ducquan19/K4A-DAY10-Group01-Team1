@@ -25,6 +25,9 @@ def generate_phase1_report(
     token_f1 = metrics.get("mean_token_f1", 0.0)
     judge_acc = metrics.get("judge_accuracy", 0.0)
     judge_score = metrics.get("mean_judge_score", 0.0)
+    judge_backend = metrics.get("judge_backend", "unknown")
+    llm_judge_samples = metrics.get("llm_judge_samples", 0)
+    fallback_judge_samples = metrics.get("fallback_judge_samples", 0)
     samples = metrics.get("samples", 0)
 
     content = f"""# Báo Cáo Pha 1 — Baseline Data Pipeline & Observability
@@ -54,14 +57,14 @@ def generate_phase1_report(
 - **Trạng thái tổng thể:** `{"PASSED" if gx_success else "FAILED"}`
 - **Chế độ kiểm định:** Ephemeral Context (RAM-only)
 - **Danh sách Expectations thực thi:**
-  1. `ExpectTableRowCountToBeBetween`: Số dòng trong khoảng [5, 5000] $\rightarrow$ **PASS**
-  2. `ExpectColumnValuesToNotBeNull`: Các cột `paper_id`, `title`, `text_for_embedding` không null $\rightarrow$ **PASS**
-  3. `ExpectColumnValuesToBeUnique`: Khóa định danh `paper_id` duy nhất 100% $\rightarrow$ **PASS**
-  4. `ExpectColumnValueLengthsToBeBetween`: Trường `summary` đạt độ dài tối thiểu $\ge 30$ ký tự $\rightarrow$ **PASS**
-  5. `ExpectColumnValueLengthsToBeBetween`: Trường `title` đạt độ dài tối thiểu $\ge 8$ ký tự $\rightarrow$ **PASS**
+  1. `ExpectTableRowCountToBeBetween`: Số dòng trong khoảng [5, 5000] $\\rightarrow$ **PASS**
+  2. `ExpectColumnValuesToNotBeNull`: Các cột `paper_id`, `title`, `text_for_embedding` không null $\\rightarrow$ **PASS**
+  3. `ExpectColumnValuesToBeUnique`: Khóa định danh `paper_id` duy nhất 100% $\\rightarrow$ **PASS**
+  4. `ExpectColumnValueLengthsToBeBetween`: Trường `summary` đạt độ dài tối thiểu ≥ 30 ký tự $\\rightarrow$ **PASS**
+  5. `ExpectColumnValueLengthsToBeBetween`: Trường `title` đạt độ dài tối thiểu ≥ 8 ký tự $\\rightarrow$ **PASS**
 
 ### 2.2. Giám Sát Độ Tươi (Freshness SLA Monitoring)
-- **Ngưỡng quy định SLA:** $\le 180$ ngày (bài báo cũ không được vượt quá 25% tổng số dữ liệu).
+- **Ngưỡng quy định SLA:** ≤ 180 ngày (bài báo cũ không được vượt quá 25% tổng số dữ liệu).
 - **Số bài báo quá hạn (> 180 ngày):** {stale_rows} / {total_rows} bài.
 - **Tỷ lệ bài cũ (Stale ratio):** {stale_ratio * 100:.1f}%.
 - **Đánh giá SLA (`is_fresh`):** `{"✅ Đạt chuẩn Freshness" if is_fresh else "⚠️ Cảnh báo dữ liệu cũ"}`.
@@ -74,10 +77,12 @@ Bộ câu hỏi benchmark gồm {samples} câu hỏi đa dạng qua 4 nhóm nghi
 
 | Chỉ số đánh giá (Metric) | Kết quả Baseline | Mục tiêu tối thiểu | Đánh giá |
 | :--- | :---: | :---: | :---: |
-| **Retrieval Hit Rate** | **{hit_rate:.2%}** | $\ge 80.0\%$ | {"✅ Đạt" if hit_rate >= 0.8 else "⚠️ Cần cải thiện"} |
-| **Mean Token F1** | **{token_f1:.4f}** | $\ge 0.5000$ | {"✅ Đạt" if token_f1 >= 0.5 else "⚠️ Cần cải thiện"} |
-| **Judge Accuracy** | **{judge_acc:.2%}** | $\ge 70.0\%$ | {"✅ Đạt" if judge_acc >= 0.7 else "⚠️ Cần cải thiện"} |
-| **Mean Judge Score (1-5)** | **{judge_score:.2f} / 5.0** | $\ge 3.0$ | {"✅ Đạt" if judge_score >= 3.0 else "⚠️ Cần cải thiện"} |
+| **Retrieval Hit Rate** | **{hit_rate:.2%}** | ≥ 80.0% | {"✅ Đạt" if hit_rate >= 0.8 else "⚠️ Cần cải thiện"} |
+| **Mean Token F1** | **{token_f1:.4f}** | ≥ 0.5000 | {"✅ Đạt" if token_f1 >= 0.5 else "⚠️ Cần cải thiện"} |
+| **Judge Accuracy** | **{judge_acc:.2%}** | ≥ 70.0% | {"✅ Đạt" if judge_acc >= 0.7 else "⚠️ Cần cải thiện"} |
+| **Mean Judge Score (1-5)** | **{judge_score:.2f} / 5.0** | ≥ 3.0 | {"✅ Đạt" if judge_score >= 3.0 else "⚠️ Cần cải thiện"} |
+
+- **Judge backend:** `{judge_backend}` — {llm_judge_samples}/{samples} lượt dùng LLM, {fallback_judge_samples}/{samples} lượt fallback heuristic.
 
 ---
 
@@ -114,6 +119,10 @@ def generate_corruption_report(
     c_jscore = corrupted_metrics.get("mean_judge_score", 0.0)
     r_jscore = repaired_metrics.get("mean_judge_score", 0.0)
 
+    b_jbackend = baseline_metrics.get("judge_backend", "unknown")
+    c_jbackend = corrupted_metrics.get("judge_backend", "unknown")
+    r_jbackend = repaired_metrics.get("judge_backend", "unknown")
+
     c_q_pass = corrupted_quality.get("success", False)
     r_q_pass = repaired_quality.get("success", True)
 
@@ -122,6 +131,8 @@ def generate_corruption_report(
 
     c_stale = corrupted_freshness.get("stale_rows", 0)
     r_stale = repaired_freshness.get("stale_rows", 0)
+    hit_recovery = r_hit - c_hit
+    f1_recovery = r_f1 - c_f1
 
     content = f"""# Báo Cáo Đối Chiếu 3 Trạng Thái — Baseline vs Corrupted vs Repaired
 
@@ -133,13 +144,14 @@ def generate_corruption_report(
 
 | Chỉ số / Tín hiệu kiểm soát | 🟢 Baseline (Sạch) | 🔴 Corrupted (Bị tiêm lỗi) | 🔵 Repaired (Sau phục hồi) | Nhận xét xu hướng |
 | :--- | :---: | :---: | :---: | :--- |
-| **Retrieval Hit Rate** | **{b_hit:.2%}** | **{c_hit:.2%}** | **{r_hit:.2%}** | Giảm mạnh khi lỗi, hồi phục 100% |
-| **Mean Token F1** | **{b_f1:.4f}** | **{c_f1:.4f}** | **{r_f1:.4f}** | RAG mất ngữ cảnh khi dữ liệu bị nhiễu/xóa |
-| **Judge Accuracy** | **{b_jacc:.2%}** | **{c_jacc:.2%}** | **{r_jacc:.2%}** | Chất lượng câu trả lời sụp đổ nghiêm trọng |
-| **Mean Judge Score (1-5)** | **{b_jscore:.2f}** | **{c_jscore:.2f}** | **{r_jscore:.2f}** | Điểm số phục hồi trọn vẹn sau repair |
+| **Retrieval Hit Rate** | **{b_hit:.2%}** | **{c_hit:.2%}** | **{r_hit:.2%}** | Corruption: {c_hit - b_hit:+.2%}; repair: {hit_recovery:+.2%} |
+| **Mean Token F1** | **{b_f1:.4f}** | **{c_f1:.4f}** | **{r_f1:.4f}** | Corruption: {c_f1 - b_f1:+.4f}; repair: {f1_recovery:+.4f} |
+| **Judge Accuracy** | **{b_jacc:.2%}** | **{c_jacc:.2%}** | **{r_jacc:.2%}** | So sánh định lượng từ cùng test set |
+| **Mean Judge Score (1-5)** | **{b_jscore:.2f}** | **{c_jscore:.2f}** | **{r_jscore:.2f}** | Không giả định mức phục hồi trước khi đo |
+| **Judge backend** | **{b_jbackend}** | **{c_jbackend}** | **{r_jbackend}** | Phân biệt LLM thật với heuristic fallback |
 | **Quality Gate Status (GX 1.x)** | **PASS** | **{"PASS" if c_q_pass else "FAIL (Phát hiện lỗi)"}** | **PASS** | GX phát hiện vi phạm tính duy nhất & độ dài |
 | **Freshness SLA Status** | **PASS** | **{"PASS" if c_fresh else "ALERT (Quá hạn SLA)"}** | **PASS** | Báo động khi bài báo bị lùi ngày quá hạn |
-| **Số lượng bài báo quá hạn** | 0 dòng | {c_stale} dòng | {r_stale} dòng | SLA khôi phục về ngưỡng an toàn |
+| **Số lượng bài báo quá hạn** | N/A | {c_stale} dòng | {r_stale} dòng | Đối chiếu từ freshness artifacts |
 
 ---
 
@@ -165,6 +177,6 @@ def generate_corruption_report(
 
 - **Nguyên lý:** Nhờ bảo toàn bản sao thô ban đầu bất biến tại `data/raw/crossref_records.json`, quá trình sửa chữa được kích hoạt bằng cách chạy lại toàn bộ pipeline làm sạch từ nguồn gốc tin cậy.
 - **Tính Idempotent:** Quy trình repair có thể thực thi lặp lại nhiều lần mà vẫn tạo ra kết quả đồng nhất và sạch 100%, loại bỏ hoàn toàn mọi tàn dư của dữ liệu độc hại mà không cần can thiệp thủ công.
-- **Kết quả nghiệm thu:** Toàn bộ chỉ số Retrieval Hit Rate, Token F1 và Judge Accuracy sau phục hồi đã lấy lại phong độ tương đương trạng thái Baseline sạch ban đầu.
+- **Kết quả nghiệm thu:** Kết quả repair được chấp nhận khi Quality Gate trở lại PASS và các metrics tiến gần hoặc bằng Baseline; các giá trị thực tế nằm trong bảng trên.
 """
     write_text(Path(report_path), content)

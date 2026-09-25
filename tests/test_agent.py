@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from core.config import load_settings, require_llm_credentials
+from core.config import load_settings, normalized_provider, require_llm_credentials
 from retrieval.agent import build_agent, run_agent_question
 
 
@@ -33,6 +33,10 @@ class AgentTests(unittest.TestCase):
         settings = replace(load_settings(), llm_provider="openai", openai_api_key=None)
         with self.assertRaisesRegex(RuntimeError, "OPENAI_API_KEY"):
             require_llm_credentials(settings)
+
+    def test_google_provider_alias_routes_to_gemini(self) -> None:
+        settings = replace(load_settings(), llm_provider="google")
+        self.assertEqual(normalized_provider(settings), "gemini")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,16 @@
+{
+  "triggered_automatically": true,
+  "trigger_reasons": [
+    "data_quality_gate_failed",
+    "freshness_sla_failed"
+  ],
+  "repair_strategy": "rebuild_from_immutable_raw_lineage",
+  "source_artifact": "data/raw/crossref_records.json",
+  "repaired_rows": 24,
+  "quality_gate_passed": true,
+  "freshness_sla_passed": true,
+  "metrics_recovered": {
+    "retrieval_hit_rate": 1.0,
+    "mean_token_f1": 1.0
+  }
+}

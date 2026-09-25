@@ -5,4 +5,7 @@ lab.txt
 src/*.egg-info/
 lab/
 **/__pycache__/
+.pytest_cache/
+.coverage
+coverage.xml
 doc_verification_report.md

@@ -130,7 +130,7 @@ Nhóm gồm **2 thành viên**, tôi đảm nhận toàn bộ 2 khối công vi�
    Dựa trên:
    - `data/reports/corruption_report.md`: Bảng so sánh 3 cột thể hiện sự phục hồi.
    - `data/results/repaired_metrics.json`: `retrieval_hit_rate` và `mean_token_f1` phục hồi về mức Baseline.
-   - `data/quality/baseline_quality_report.json`: Quality check và Freshness SLA đều trả về `True`.
+   - `data/quality/repaired_quality_report.json`: Quality check và Freshness SLA đều trả về `True`.
 
 ---
 
@@ -139,5 +139,5 @@ Nhóm gồm **2 thành viên**, tôi đảm nhận toàn bộ 2 khối công vi�
 - **Điều học được:** Nhận thức rõ ràng rằng trong sản phẩm AI thực tế, 60-80% thời gian là xử lý và kiểm soát chất lượng dữ liệu. Data Observability là tấm khiên bảo vệ AI Agent khỏi hiện tượng Silent Failure.
 - **Cam kết:** Báo cáo phản ánh trung thực toàn bộ phần việc đã tự thực hiện, mã nguồn chạy thực tế không lỗi, và bản thân có thể tự tin thuyết trình toàn bộ quy trình trước lớp.
 
-**Họ và tên:** [Thành viên 2]
+**Họ và tên:** Trần Đức Quân
 **Ngày xác nhận:** 2026-09-25

@@ -128,8 +128,8 @@ Starter Repo được cấu trúc dạng module hóa rõ ràng:
 └── pyproject.toml           <- Quản lý dependencies (Python 3.11-3.13)
 ```
 
-> ⚠️ **LƯU Ý VỀ CODE KHUNG:**  
-> Các file trong `src/` chứa các khối `TODO(student)` và `raise NotImplementedError`. Đây là bài tập thiết kế kỹ thuật, nhóm cần đọc kỹ docstring và hoàn thiện từng module theo thứ tự hướng dẫn trong [Guide.md](docs/Guide.md).
+> ✅ **TRẠNG THÁI CODE:**
+> Toàn bộ khối bài tập trong `src/` đã được hoàn thiện và không còn placeholder chưa triển khai. Luồng nghiệm thu và lệnh tái hiện được mô tả trong [Guide.md](docs/Guide.md) và phần checklist bên dưới.
 
 ---
 
@@ -185,12 +185,28 @@ Copy-Item .env.example .env
 # macOS / Linux:
 cp .env.example .env
 ```
-Mở file `.env` và điền API Key tương ứng (mặc định hỗ trợ `gemini`, `openai`, `anthropic`, `ollama`):
+Mở file `.env` và điền API Key tương ứng (hỗ trợ `gemini`, `openai`, `anthropic`, `openrouter`, `ollama`, `custom`, `mock`). Ví dụ cấu hình OpenRouter:
 ```dotenv
-LLM_PROVIDER=gemini
-LLM_MODEL=gemini-2.5-flash
-GOOGLE_API_KEY=your_gemini_api_key_here
+LLM_PROVIDER=openrouter
+LLM_MODEL=openai/gpt-4o-mini
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 ```
+
+Không commit file `.env`. Chạy smoke test API/RAG sau khi điền key:
+
+```powershell
+python -c "from core.config import load_settings; from retrieval.index import LocalEmbeddingIndex; from retrieval.agent import build_agent, run_agent_question; s=load_settings(); idx=LocalEmbeddingIndex.load(s); print(run_agent_question(build_agent(s, idx), 'What are the main research topics in the indexed papers?'))"
+```
+
+### Kiểm thử tự động và coverage
+
+```powershell
+python -m pip install -e ".[dev]"
+python -m pytest -p no:cacheprovider --cov=src --cov-report=term-missing
+```
+
+GitHub Actions chạy cùng test suite trên Python 3.11 và 3.13. Coverage gate bắt buộc đạt tối thiểu 80%.
 
 ---
 
@@ -216,6 +232,7 @@ GOOGLE_API_KEY=your_gemini_api_key_here
   - `data/results/corruption_log.json` (ghi nhận 6 dạng lỗi)
   - `data/results/corrupted_metrics.json` (chứng minh chỉ số giảm sút)
   - `data/results/repaired_metrics.json` (chứng minh chỉ số phục hồi)
+  - `data/results/repair_log.json` (bằng chứng tự động kích hoạt repair)
   - `data/reports/corruption_report.md` (bảng đối chiếu 3 trạng thái rõ ràng)
 - [ ] **Data Observability (GX 1.x):** Quality Gate sử dụng cú pháp chuẩn GX 1.x (`gx.get_context()`, `add_pandas()`), phát hiện thành công khi data bị inject lỗi.
 - [ ] **Bảo mật:** Không commit file `.env` hoặc API Key cá nhân lên GitHub.

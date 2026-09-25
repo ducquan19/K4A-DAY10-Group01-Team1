@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.config import load_settings
-from core.utils import now_utc, read_json
+from core.utils import now_utc, read_json, write_json
 from evaluation.metrics import evaluate_pipeline
 from ingestion.cleaning import build_clean_dataframe
 from ingestion.corruption import corrupt_clean_dataframe
@@ -33,6 +33,14 @@ def main() -> None:
         settings,
         paths.quality_dir / "corrupted_freshness_report.json",
     )
+    repair_reasons = []
+    if not corrupted_quality.get("success", False):
+        repair_reasons.append("data_quality_gate_failed")
+    if not corrupted_freshness.get("is_fresh", True):
+        repair_reasons.append("freshness_sla_failed")
+    if not repair_reasons:
+        raise RuntimeError("Corruption was not detected; automatic repair was not triggered.")
+
     corrupted_index = LocalEmbeddingIndex.build(
         corrupted_df,
         settings,
@@ -71,6 +79,22 @@ def main() -> None:
         paths.eval_testset,
         paths.repaired_metrics,
         paths.repaired_answers,
+    )
+    write_json(
+        paths.repair_log,
+        {
+            "triggered_automatically": True,
+            "trigger_reasons": repair_reasons,
+            "repair_strategy": "rebuild_from_immutable_raw_lineage",
+            "source_artifact": "data/raw/crossref_records.json",
+            "repaired_rows": len(repaired_df),
+            "quality_gate_passed": bool(repaired_quality.get("success", False)),
+            "freshness_sla_passed": bool(repaired_freshness.get("is_fresh", False)),
+            "metrics_recovered": {
+                "retrieval_hit_rate": repaired_evaluation.summary["retrieval_hit_rate"],
+                "mean_token_f1": repaired_evaluation.summary["mean_token_f1"],
+            },
+        },
     )
     generate_corruption_report(
         paths.comparison_report,
